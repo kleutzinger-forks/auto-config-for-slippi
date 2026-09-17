@@ -3,10 +3,11 @@ import { IconButton, InputBase, Stack, Tooltip } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
 import { AdditionalIso } from '../common/types';
 
-// Additional ISOs are extra Melee builds (e.g. a modded/ACE build) copied
-// alongside the primary ISO so Nintendont can list them too. They're
-// intentionally kept out of the autoboot/cheats pipeline, which only ever
-// targets the single primary ISO configured above.
+// Additional ISOs aren't necessarily Melee (e.g. a different GameCube game,
+// or a modded build) copied alongside the primary ISO so Nintendont can
+// list them too. They're intentionally kept out of the autoboot/cheats
+// pipeline, which only ever targets the single primary Melee ISO configured
+// above.
 export default function AdditionalIsos({
   openErrorMessage,
 }: {
@@ -51,10 +52,10 @@ export default function AdditionalIsos({
         <InputBase
           disabled
           size="small"
-          value="Add additional Melee ISO(s)..."
+          value="Add additional ISO(s)..."
           style={{ flexGrow: 1 }}
         />
-        <Tooltip arrow placement="left" title="Add additional Melee ISO(s)">
+        <Tooltip arrow placement="left" title="Add additional ISO(s)">
           <IconButton
             onClick={async () => {
               try {

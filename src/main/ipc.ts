@@ -13,7 +13,7 @@ import { copyFile, mkdir, readFile, stat } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { XMLParser } from 'fast-xml-parser';
 import getSdCards, { additionalIsoRelativePath, writeNincfg } from './sd';
-import isValidISO from './iso';
+import isValidISO, { isValidGameCubeISO } from './iso';
 import eject from './eject';
 import { AdditionalIso, Config, SdCard, Video } from '../common/types';
 import { DEFAULT_CONFIG } from '../common/constants';
@@ -77,10 +77,11 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
     return isoPath;
   });
 
-  // Additional ISOs are copied onto SD cards purely so Nintendont can list
-  // them (e.g. a modded build alongside vanilla Melee). They never
-  // participate in autoboot or the cheats/.gct pipeline, which stay wired to
-  // the single primary ISO above.
+  // Additional ISOs aren't necessarily Melee (e.g. a different GameCube
+  // game, or a modded build). They're copied onto SD cards purely so
+  // Nintendont can list them, and never participate in autoboot or the
+  // cheats/.gct pipeline, which stay wired to the single primary Melee ISO
+  // above.
   let additionalIsoPaths = store.get('additionalIsoPaths', []);
   ipcMain.removeAllListeners('getAdditionalIsoPaths');
   ipcMain.handle('getAdditionalIsoPaths', () => additionalIsoPaths);
@@ -89,7 +90,7 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
     const openDialogRes = await dialog.showOpenDialog({
       filters: [
         {
-          name: 'Melee ISO',
+          name: 'GameCube ISO',
           extensions: ['iso'],
         },
       ],
@@ -103,7 +104,7 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
     const newEntries: AdditionalIso[] = [];
     await Promise.all(
       openDialogRes.filePaths.map(async (newPath) => {
-        if (await isValidISO(newPath)) {
+        if (await isValidGameCubeISO(newPath)) {
           newEntries.push({ id: randomUUID(), path: newPath });
         } else {
           invalidPaths.push(newPath);
@@ -116,9 +117,7 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
       store.set('additionalIsoPaths', additionalIsoPaths);
     }
     if (invalidPaths.length > 0) {
-      throw new Error(
-        `ISO game code not GALE01, GALJ01, or GALP01: ${invalidPaths.join(', ')}`,
-      );
+      throw new Error(`Not a valid GameCube ISO: ${invalidPaths.join(', ')}`);
     }
     return additionalIsoPaths;
   });

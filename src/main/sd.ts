@@ -13,7 +13,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { list } from 'drivelist';
 import { app } from 'electron';
 import { gt, valid } from 'semver';
-import isValidISO from './iso';
+import isValidISO, { isValidGameCubeISO } from './iso';
 import { AdditionalIso, Config, SdCard, Video } from '../common/types';
 
 type RemovableDrive = {
@@ -117,7 +117,7 @@ async function getSdCard(
       await Promise.all(
         additionalIsoPaths.map(async (additionalIso) => {
           if (
-            await isValidISO(
+            await isValidGameCubeISO(
               path.join(
                 removableDrive.path,
                 additionalIsoRelativePath(additionalIso.id),
