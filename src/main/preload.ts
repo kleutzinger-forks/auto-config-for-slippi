@@ -27,6 +27,8 @@ const electronHandler = {
     ipcRenderer.invoke('getForwarderVersion'),
   getSlippiNintendontVersion: (): Promise<string> =>
     ipcRenderer.invoke('getSlippiNintendontVersion'),
+  getNintendontRidersVersion: (): Promise<string> =>
+    ipcRenderer.invoke('getNintendontRidersVersion'),
   copyIso: (sdCard: SdCard): Promise<void> =>
     ipcRenderer.invoke('copyIso', sdCard),
   copyAdditionalIso: (sdCard: SdCard, id: string): Promise<void> =>

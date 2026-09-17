@@ -25,4 +25,5 @@ export const DEFAULT_CONFIG: Config = {
   widescreen: Widescreen.OFF,
   safety: true,
   stealthAutoBoot: true,
+  nintendontRiders: false,
 };

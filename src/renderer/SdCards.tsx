@@ -19,6 +19,8 @@ function SdCardContent({
   additionalIsoPaths,
   forwarderVersion,
   slippiNintendontVersion,
+  nintendontRidersEnabled,
+  nintendontRidersVersion,
   openErrorMessage,
   refresh,
 }: {
@@ -27,6 +29,8 @@ function SdCardContent({
   additionalIsoPaths: AdditionalIso[];
   forwarderVersion: string;
   slippiNintendontVersion: string;
+  nintendontRidersEnabled: boolean;
+  nintendontRidersVersion: string;
   openErrorMessage: (message: string) => void;
   refresh: () => Promise<void>;
 }) {
@@ -119,6 +123,17 @@ function SdCardContent({
           ? `version: ${sdCard.slippiNintendontVersion}`
           : 'not found'}
       </Typography>
+      {nintendontRidersEnabled && (
+        <Typography variant="caption" lineHeight="20px">
+          {sdCard.nintendontRidersVersion === nintendontRidersVersion
+            ? '✅'
+            : '❌'}{' '}
+          Nintendont Riders{' '}
+          {sdCard.nintendontRidersVersion
+            ? `version: ${sdCard.nintendontRidersVersion}`
+            : 'not found'}
+        </Typography>
+      )}
       {copyingIso && (
         <LinearProgress
           variant="determinate"
@@ -148,7 +163,9 @@ function SdCardContent({
         <Button
           disabled={
             (sdCard.forwarderVersion === forwarderVersion &&
-              sdCard.slippiNintendontVersion === slippiNintendontVersion) ||
+              sdCard.slippiNintendontVersion === slippiNintendontVersion &&
+              (!nintendontRidersEnabled ||
+                sdCard.nintendontRidersVersion === nintendontRidersVersion)) ||
             copyingApps
           }
           variant="contained"
@@ -172,6 +189,8 @@ function SdCardContent({
           disabled={
             !sdCard.validIsoPath ||
             sdCard.slippiNintendontVersion !== slippiNintendontVersion ||
+            (nintendontRidersEnabled &&
+              sdCard.nintendontRidersVersion !== nintendontRidersVersion) ||
             writing ||
             wrote
           }
@@ -206,6 +225,8 @@ function SdCardEl({
   additionalIsoPaths,
   forwarderVersion,
   slippiNintendontVersion,
+  nintendontRidersEnabled,
+  nintendontRidersVersion,
   openErrorMessage,
   refresh,
   removeSdCard,
@@ -215,6 +236,8 @@ function SdCardEl({
   additionalIsoPaths: AdditionalIso[];
   forwarderVersion: string;
   slippiNintendontVersion: string;
+  nintendontRidersEnabled: boolean;
+  nintendontRidersVersion: string;
   openErrorMessage: (message: string) => void;
   refresh: () => Promise<void>;
   removeSdCard: () => void;
@@ -260,6 +283,8 @@ function SdCardEl({
         additionalIsoPaths={additionalIsoPaths}
         forwarderVersion={forwarderVersion}
         slippiNintendontVersion={slippiNintendontVersion}
+        nintendontRidersEnabled={nintendontRidersEnabled}
+        nintendontRidersVersion={nintendontRidersVersion}
         openErrorMessage={openErrorMessage}
         refresh={refresh}
       />
@@ -276,6 +301,8 @@ export default function SdCards({
 }) {
   const [sdCards, setSdCards] = useState<SdCard[]>([]);
   const [forwarderVersion, setForwarderVersion] = useState('');
+  const [nintendontRidersEnabled, setNintendontRidersEnabled] = useState(false);
+  const [nintendontRidersVersion, setNintendontRidersVersion] = useState('');
   const [additionalIsoPaths, setAdditionalIsoPaths] = useState<AdditionalIso[]>(
     [],
   );
@@ -283,9 +310,14 @@ export default function SdCards({
     (async () => {
       const sdCardsPromise = window.electron.getSdCards();
       const forwarderVersionPromise = window.electron.getForwarderVersion();
+      const configPromise = window.electron.getConfig();
+      const nintendontRidersVersionPromise =
+        window.electron.getNintendontRidersVersion();
       const additionalIsoPathsPromise = window.electron.getAdditionalIsoPaths();
       setSdCards(await sdCardsPromise);
       setForwarderVersion(await forwarderVersionPromise);
+      setNintendontRidersEnabled((await configPromise).nintendontRiders);
+      setNintendontRidersVersion(await nintendontRidersVersionPromise);
       setAdditionalIsoPaths(await additionalIsoPathsPromise);
     })();
   }, []);
@@ -305,6 +337,9 @@ export default function SdCards({
     try {
       const sdCardsPromise = window.electron.getSdCards();
       setAdditionalIsoPaths(await window.electron.getAdditionalIsoPaths());
+      setNintendontRidersEnabled(
+        (await window.electron.getConfig()).nintendontRiders,
+      );
       setSdCards(await sdCardsPromise);
     } catch (e: unknown) {
       openErrorMessage(
@@ -370,6 +405,8 @@ export default function SdCards({
             additionalIsoPaths={additionalIsoPaths}
             forwarderVersion={forwarderVersion}
             slippiNintendontVersion={slippiNintendontVersion}
+            nintendontRidersEnabled={nintendontRidersEnabled}
+            nintendontRidersVersion={nintendontRidersVersion}
             openErrorMessage={openErrorMessage}
             refresh={refresh}
           />
@@ -383,6 +420,8 @@ export default function SdCards({
           additionalIsoPaths={additionalIsoPaths}
           forwarderVersion={forwarderVersion}
           slippiNintendontVersion={slippiNintendontVersion}
+          nintendontRidersEnabled={nintendontRidersEnabled}
+          nintendontRidersVersion={nintendontRidersVersion}
           openErrorMessage={openErrorMessage}
           refresh={refresh}
           removeSdCard={() => {

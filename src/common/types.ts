@@ -8,6 +8,7 @@ export type SdCard = {
   reason: string;
   forwarderVersion: string;
   slippiNintendontVersion: string;
+  nintendontRidersVersion: string;
   validIsoPath: string;
   additionalIsoIdsPresent: string[];
 };
@@ -82,4 +83,5 @@ export type Config = {
   widescreen: Widescreen;
   safety: boolean;
   stealthAutoBoot: boolean;
+  nintendontRiders: boolean;
 };

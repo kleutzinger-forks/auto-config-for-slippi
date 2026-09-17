@@ -30,6 +30,10 @@ export function additionalIsoRelativePath(id: string) {
   return path.join('games', `extra-${id}`, 'game.iso');
 }
 
+// Kept in its own apps/ folder, distinct from Slippi Nintendont, so the two
+// builds coexist on the same SD card without either overwriting the other.
+export const nintendontRidersDirName = 'Nintendont Riders';
+
 function canEnableStealthAutoboot(slippiNintendontVersion: string) {
   return (
     !valid(slippiNintendontVersion) || gt(slippiNintendontVersion, '1.13.0')
@@ -43,6 +47,7 @@ async function getSdCard(
   let reason = '';
   let forwarderVersion = '';
   let slippiNintendontVersion = '';
+  let nintendontRidersVersion = '';
   let validIsoPath = '';
   const additionalIsoIdsPresent: string[] = [];
   if (!removableDrive.readonly) {
@@ -81,6 +86,25 @@ async function getSdCard(
           const { version } = metaObj.app;
           if (typeof version === 'string') {
             forwarderVersion = version;
+          }
+        }
+      } catch {
+        // just catch
+      }
+
+      const nintendontRidersMetaPath = path.join(
+        removableDrive.path,
+        'apps',
+        nintendontRidersDirName,
+        'meta.xml',
+      );
+      try {
+        const metaXmlBuffer = await readFile(nintendontRidersMetaPath);
+        const metaObj = xmlParser.parse(metaXmlBuffer);
+        if (metaObj?.app?.name === 'Nintendont - Riders') {
+          const { version } = metaObj.app;
+          if (typeof version === 'string') {
+            nintendontRidersVersion = version;
           }
         }
       } catch {
@@ -140,6 +164,7 @@ async function getSdCard(
     reason,
     forwarderVersion,
     slippiNintendontVersion,
+    nintendontRidersVersion,
     validIsoPath,
     additionalIsoIdsPresent,
   };
@@ -307,4 +332,54 @@ export async function writeNincfg(
       });
     }
   }
+}
+
+// Mainline Nintendont's on-disk config struct, unrelated to the Slippi fork's
+// slippi_nincfg.bin format above. Reverse engineered from
+// common/include/CommonConfig.h (NIN_CFG) in nfsman34/Nintendont-SonicRiders:
+// magic/version/config bitmask come first and are stable across the struct's
+// internal padding, so those are the only offsets writeNintendontRidersNincfg
+// depends on being exactly right.
+const NINTENDONT_RIDERS_MAGIC = 0x01070cf6;
+const NINTENDONT_RIDERS_CFG_VERSION = 0x0000000a;
+const NINTENDONT_RIDERS_CFG_SIZE = 548;
+const NINTENDONT_RIDERS_CFG_NATIVE_SI_BIT = 1 << 14;
+
+// Writes/updates the standard nincfg.bin at the SD root (Nintendont Riders,
+// unlike Slippi Nintendont, uses this stock filename). Preserves any existing
+// config the user has saved via Nintendont's own menu and only forces the
+// Native Control bit on.
+export async function writeNintendontRidersNincfg(sdCard: SdCard) {
+  const nincfgPath = path.join(sdCard.key, 'nincfg.bin');
+  let buffer: Buffer | undefined;
+  try {
+    const existing = await readFile(nincfgPath);
+    if (
+      existing.length >= NINTENDONT_RIDERS_CFG_SIZE &&
+      existing.readUInt32BE(0) === NINTENDONT_RIDERS_MAGIC &&
+      existing.readUInt32BE(4) === NINTENDONT_RIDERS_CFG_VERSION
+    ) {
+      buffer = existing.subarray(0, NINTENDONT_RIDERS_CFG_SIZE);
+    }
+  } catch {
+    // just catch, fall back to a fresh default config below
+  }
+
+  if (!buffer) {
+    buffer = Buffer.alloc(NINTENDONT_RIDERS_CFG_SIZE);
+    buffer.writeUInt32BE(NINTENDONT_RIDERS_MAGIC, 0);
+    buffer.writeUInt32BE(NINTENDONT_RIDERS_CFG_VERSION, 4);
+    // language: auto
+    buffer.writeUInt32BE(0xffffffff, 16);
+    // max pads
+    buffer.writeUInt32BE(4, 532);
+    // mem card blocks
+    buffer.writeUInt8(2, 540);
+  }
+
+  buffer.writeUInt32BE(
+    buffer.readUInt32BE(8) | NINTENDONT_RIDERS_CFG_NATIVE_SI_BIT,
+    8,
+  );
+  await writeFile(nincfgPath, buffer);
 }

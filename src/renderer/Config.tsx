@@ -521,6 +521,34 @@ export default function ConfigEl() {
                   }
                 />
               </ListItem>
+              <ListItem disablePadding>
+                <FormControlLabel
+                  label="Nintendont Riders"
+                  labelPlacement="start"
+                  style={{
+                    alignItems: 'center',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    height: '40px',
+                    margin: 0,
+                    width: '100%',
+                  }}
+                  control={
+                    <Switch
+                      size="small"
+                      checked={config.nintendontRiders}
+                      onChange={async (ev: ChangeEvent<HTMLInputElement>) => {
+                        const newConfig: Config = {
+                          ...config,
+                          nintendontRiders: ev.target.checked,
+                        };
+                        await window.electron.setConfig(newConfig);
+                        setConfig(newConfig);
+                      }}
+                    />
+                  }
+                />
+              </ListItem>
             </List>
             <Stack direction="row" justifyContent="end" width="100%">
               <Button

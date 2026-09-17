@@ -12,7 +12,12 @@ import path from 'path';
 import { copyFile, mkdir, readFile, stat } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { XMLParser } from 'fast-xml-parser';
-import getSdCards, { additionalIsoRelativePath, writeNincfg } from './sd';
+import getSdCards, {
+  additionalIsoRelativePath,
+  nintendontRidersDirName,
+  writeNincfg,
+  writeNintendontRidersNincfg,
+} from './sd';
 import isValidISO, { isValidGameCubeISO } from './iso';
 import eject from './eject';
 import { AdditionalIso, Config, SdCard, Video } from '../common/types';
@@ -25,6 +30,9 @@ const forwarderRootPath = app.isPackaged
 const slippiNintendontRootPath = app.isPackaged
   ? path.join(process.resourcesPath, 'assets', 'slippiNintendont')
   : path.join(__dirname, '..', '..', 'assets', 'slippiNintendont');
+const nintendontRidersRootPath = app.isPackaged
+  ? path.join(process.resourcesPath, 'assets', 'nintendontRiders')
+  : path.join(__dirname, '..', '..', 'assets', 'nintendontRiders');
 const xmlParser = new XMLParser({ parseTagValue: false });
 
 async function getSlippiNintendontVersion(slippiNintendontPath: string) {
@@ -198,6 +206,9 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
   if (typeof config.stealthAutoBoot !== 'boolean') {
     config.stealthAutoBoot = true;
   }
+  if (typeof config.nintendontRiders !== 'boolean') {
+    config.nintendontRiders = false;
+  }
   ipcMain.removeAllListeners('getConfig');
   ipcMain.handle('getConfig', () => config);
   ipcMain.removeAllListeners('setConfig');
@@ -238,6 +249,30 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
 
   ipcMain.removeAllListeners('getSlippiNintendontVersion');
   ipcMain.handle('getSlippiNintendontVersion', () => slippiNintendontVersion);
+
+  let nintendontRidersVersion = '';
+  ipcMain.removeAllListeners('getNintendontRidersVersion');
+  ipcMain.handle('getNintendontRidersVersion', async () => {
+    if (nintendontRidersVersion) {
+      return nintendontRidersVersion;
+    }
+
+    const metaXmlBuffer = await readFile(
+      path.join(nintendontRidersRootPath, 'meta.xml'),
+    );
+    const metaObj = xmlParser.parse(metaXmlBuffer);
+    if (metaObj?.app?.name !== 'Nintendont - Riders') {
+      throw new Error('bundled meta.xml app name');
+    }
+
+    const { version } = metaObj.app;
+    if (typeof version !== 'string') {
+      throw new Error('bundled meta.xml app version');
+    }
+
+    nintendontRidersVersion = version;
+    return version;
+  });
 
   const keyToProgress = new Map<
     string,
@@ -367,6 +402,27 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
           ),
         ]);
       }
+      if (
+        config.nintendontRiders &&
+        sdCard.nintendontRidersVersion !== nintendontRidersVersion
+      ) {
+        const appPath = path.join(sdCard.key, 'apps', nintendontRidersDirName);
+        await mkdir(appPath, { recursive: true });
+        await Promise.all([
+          copyFile(
+            path.join(nintendontRidersRootPath, 'boot.dol'),
+            path.join(appPath, 'boot.dol'),
+          ),
+          copyFile(
+            path.join(nintendontRidersRootPath, 'icon.png'),
+            path.join(appPath, 'icon.png'),
+          ),
+          copyFile(
+            path.join(nintendontRidersRootPath, 'meta.xml'),
+            path.join(appPath, 'meta.xml'),
+          ),
+        ]);
+      }
     },
   );
 
@@ -375,6 +431,9 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
     'writeConfig',
     async (event: IpcMainInvokeEvent, sdCard: SdCard) => {
       await writeNincfg(sdCard, config, codePath);
+      if (config.nintendontRiders) {
+        await writeNintendontRidersNincfg(sdCard);
+      }
     },
   );
 
