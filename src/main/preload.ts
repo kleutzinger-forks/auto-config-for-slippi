@@ -1,9 +1,15 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
-import { Config, SdCard } from '../common/types';
+import { AdditionalIso, Config, SdCard } from '../common/types';
 
 const electronHandler = {
   getIsoPath: (): Promise<string> => ipcRenderer.invoke('getIsoPath'),
   chooseIsoPath: (): Promise<string> => ipcRenderer.invoke('chooseIsoPath'),
+  getAdditionalIsoPaths: (): Promise<AdditionalIso[]> =>
+    ipcRenderer.invoke('getAdditionalIsoPaths'),
+  addAdditionalIsoPaths: (): Promise<AdditionalIso[]> =>
+    ipcRenderer.invoke('addAdditionalIsoPaths'),
+  removeAdditionalIsoPath: (id: string): Promise<AdditionalIso[]> =>
+    ipcRenderer.invoke('removeAdditionalIsoPath', id),
   getSlippiNintendontPath: (): Promise<string> =>
     ipcRenderer.invoke('getSlippiNintendontPath'),
   chooseSlippiNintendontPath: (): Promise<string> =>
@@ -23,6 +29,8 @@ const electronHandler = {
     ipcRenderer.invoke('getSlippiNintendontVersion'),
   copyIso: (sdCard: SdCard): Promise<void> =>
     ipcRenderer.invoke('copyIso', sdCard),
+  copyAdditionalIso: (sdCard: SdCard, id: string): Promise<void> =>
+    ipcRenderer.invoke('copyAdditionalIso', sdCard, id),
   copyApps: (sdCard: SdCard): Promise<void> =>
     ipcRenderer.invoke('copyApps', sdCard),
   writeConfig: (sdCard: SdCard): Promise<void> =>

@@ -11,11 +11,12 @@ import {
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import { Eject, Refresh } from '@mui/icons-material';
-import { SdCard } from '../common/types';
+import { AdditionalIso, SdCard } from '../common/types';
 
 function SdCardContent({
   keyToPercent,
   sdCard,
+  additionalIsoPaths,
   forwarderVersion,
   slippiNintendontVersion,
   openErrorMessage,
@@ -23,12 +24,16 @@ function SdCardContent({
 }: {
   keyToPercent: Map<string, number>;
   sdCard: SdCard;
+  additionalIsoPaths: AdditionalIso[];
   forwarderVersion: string;
   slippiNintendontVersion: string;
   openErrorMessage: (message: string) => void;
   refresh: () => Promise<void>;
 }) {
   const [copyingIso, setCopyingIso] = useState(false);
+  const [copyingAdditionalIsoIds, setCopyingAdditionalIsoIds] = useState(
+    new Set<string>(),
+  );
   const [copyingApps, setCopyingApps] = useState(false);
   const [writing, setWriting] = useState(false);
   const [wrote, setWrote] = useState(false);
@@ -41,6 +46,63 @@ function SdCardContent({
         {sdCard.validIsoPath ? '✅' : '❌'} Melee ISO
         {sdCard.validIsoPath ? `: ${sdCard.validIsoPath}` : ' not found'}
       </Typography>
+      {additionalIsoPaths.map((additionalIso) => {
+        const present = sdCard.additionalIsoIdsPresent.includes(
+          additionalIso.id,
+        );
+        const copying = copyingAdditionalIsoIds.has(additionalIso.id);
+        return (
+          <Stack
+            key={additionalIso.id}
+            direction="row"
+            alignItems="center"
+            gap="8px"
+          >
+            <Typography variant="caption" lineHeight="20px" flexGrow={1}>
+              {present ? '✅' : '❌'} {additionalIso.path}
+            </Typography>
+            {copying && (
+              <LinearProgress
+                variant="determinate"
+                value={
+                  (keyToPercent.get(`${sdCard.key}#${additionalIso.id}`) ?? 0) *
+                  100
+                }
+                style={{ flexGrow: 1 }}
+              />
+            )}
+            <Button
+              disabled={present || copying}
+              size="small"
+              variant="contained"
+              onClick={async () => {
+                setCopyingAdditionalIsoIds((prev) =>
+                  new Set(prev).add(additionalIso.id),
+                );
+                try {
+                  await window.electron.copyAdditionalIso(
+                    sdCard,
+                    additionalIso.id,
+                  );
+                  await refresh();
+                } catch (e: unknown) {
+                  openErrorMessage(
+                    e instanceof Error ? e.message : JSON.stringify(e ?? ''),
+                  );
+                } finally {
+                  setCopyingAdditionalIsoIds((prev) => {
+                    const next = new Set(prev);
+                    next.delete(additionalIso.id);
+                    return next;
+                  });
+                }
+              }}
+            >
+              {copying ? 'Copying...' : 'Copy'}
+            </Button>
+          </Stack>
+        );
+      })}
       <Typography variant="caption" lineHeight="20px">
         {sdCard.forwarderVersion === forwarderVersion ? '✅' : '❌'} Forwarder
         for Slippi Nintendont{' '}
@@ -141,6 +203,7 @@ function SdCardContent({
 function SdCardEl({
   keyToPercent,
   sdCard,
+  additionalIsoPaths,
   forwarderVersion,
   slippiNintendontVersion,
   openErrorMessage,
@@ -149,6 +212,7 @@ function SdCardEl({
 }: {
   keyToPercent: Map<string, number>;
   sdCard: SdCard;
+  additionalIsoPaths: AdditionalIso[];
   forwarderVersion: string;
   slippiNintendontVersion: string;
   openErrorMessage: (message: string) => void;
@@ -193,6 +257,7 @@ function SdCardEl({
       <SdCardContent
         keyToPercent={keyToPercent}
         sdCard={sdCard}
+        additionalIsoPaths={additionalIsoPaths}
         forwarderVersion={forwarderVersion}
         slippiNintendontVersion={slippiNintendontVersion}
         openErrorMessage={openErrorMessage}
@@ -211,12 +276,17 @@ export default function SdCards({
 }) {
   const [sdCards, setSdCards] = useState<SdCard[]>([]);
   const [forwarderVersion, setForwarderVersion] = useState('');
+  const [additionalIsoPaths, setAdditionalIsoPaths] = useState<AdditionalIso[]>(
+    [],
+  );
   useEffect(() => {
     (async () => {
       const sdCardsPromise = window.electron.getSdCards();
       const forwarderVersionPromise = window.electron.getForwarderVersion();
+      const additionalIsoPathsPromise = window.electron.getAdditionalIsoPaths();
       setSdCards(await sdCardsPromise);
       setForwarderVersion(await forwarderVersionPromise);
+      setAdditionalIsoPaths(await additionalIsoPathsPromise);
     })();
   }, []);
 
@@ -233,7 +303,9 @@ export default function SdCards({
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      setSdCards(await window.electron.getSdCards());
+      const sdCardsPromise = window.electron.getSdCards();
+      setAdditionalIsoPaths(await window.electron.getAdditionalIsoPaths());
+      setSdCards(await sdCardsPromise);
     } catch (e: unknown) {
       openErrorMessage(
         e instanceof Error ? e.message : JSON.stringify(e ?? ''),
@@ -295,6 +367,7 @@ export default function SdCards({
           <SdCardContent
             keyToPercent={keyToPercent}
             sdCard={sdCards[0]}
+            additionalIsoPaths={additionalIsoPaths}
             forwarderVersion={forwarderVersion}
             slippiNintendontVersion={slippiNintendontVersion}
             openErrorMessage={openErrorMessage}
@@ -307,6 +380,7 @@ export default function SdCards({
           key={sdCard.key}
           keyToPercent={keyToPercent}
           sdCard={sdCard}
+          additionalIsoPaths={additionalIsoPaths}
           forwarderVersion={forwarderVersion}
           slippiNintendontVersion={slippiNintendontVersion}
           openErrorMessage={openErrorMessage}

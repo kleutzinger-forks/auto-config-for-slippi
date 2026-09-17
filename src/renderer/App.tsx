@@ -12,6 +12,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import SdCards from './SdCards';
 import ConfigEl from './Config';
+import AdditionalIsos from './AdditionalIsos';
 import Version from './Version';
 
 export default function App() {
@@ -114,6 +115,7 @@ export default function App() {
           </IconButton>
         </Tooltip>
       </Stack>
+      <AdditionalIsos openErrorMessage={openErrorMessage} />
       <ConfigEl />
       <SdCards
         slippiNintendontVersion={slippiNintendontVersion}

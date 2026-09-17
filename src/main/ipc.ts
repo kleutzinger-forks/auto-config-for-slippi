@@ -10,11 +10,12 @@ import Store from 'electron-store';
 import { createReadStream, createWriteStream, WriteStream } from 'fs';
 import path from 'path';
 import { copyFile, mkdir, readFile, stat } from 'fs/promises';
+import { randomUUID } from 'crypto';
 import { XMLParser } from 'fast-xml-parser';
-import getSdCards, { writeNincfg } from './sd';
+import getSdCards, { additionalIsoRelativePath, writeNincfg } from './sd';
 import isValidISO from './iso';
 import eject from './eject';
-import { Config, SdCard, Video } from '../common/types';
+import { AdditionalIso, Config, SdCard, Video } from '../common/types';
 import { DEFAULT_CONFIG } from '../common/constants';
 
 const highWaterMark = 1024 * 1024;
@@ -47,6 +48,7 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
     codePath: string;
     config: Config;
     isoPath: string;
+    additionalIsoPaths: AdditionalIso[];
   }>();
 
   let isoPath = store.get('isoPath', '');
@@ -74,6 +76,63 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
     isoPath = newIsoPath;
     return isoPath;
   });
+
+  // Additional ISOs are copied onto SD cards purely so Nintendont can list
+  // them (e.g. a modded build alongside vanilla Melee). They never
+  // participate in autoboot or the cheats/.gct pipeline, which stay wired to
+  // the single primary ISO above.
+  let additionalIsoPaths = store.get('additionalIsoPaths', []);
+  ipcMain.removeAllListeners('getAdditionalIsoPaths');
+  ipcMain.handle('getAdditionalIsoPaths', () => additionalIsoPaths);
+  ipcMain.removeAllListeners('addAdditionalIsoPaths');
+  ipcMain.handle('addAdditionalIsoPaths', async () => {
+    const openDialogRes = await dialog.showOpenDialog({
+      filters: [
+        {
+          name: 'Melee ISO',
+          extensions: ['iso'],
+        },
+      ],
+      properties: ['openFile', 'multiSelections', 'showHiddenFiles'],
+    });
+    if (openDialogRes.canceled) {
+      return additionalIsoPaths;
+    }
+
+    const invalidPaths: string[] = [];
+    const newEntries: AdditionalIso[] = [];
+    await Promise.all(
+      openDialogRes.filePaths.map(async (newPath) => {
+        if (await isValidISO(newPath)) {
+          newEntries.push({ id: randomUUID(), path: newPath });
+        } else {
+          invalidPaths.push(newPath);
+        }
+      }),
+    );
+
+    if (newEntries.length > 0) {
+      additionalIsoPaths = [...additionalIsoPaths, ...newEntries];
+      store.set('additionalIsoPaths', additionalIsoPaths);
+    }
+    if (invalidPaths.length > 0) {
+      throw new Error(
+        `ISO game code not GALE01, GALJ01, or GALP01: ${invalidPaths.join(', ')}`,
+      );
+    }
+    return additionalIsoPaths;
+  });
+  ipcMain.removeAllListeners('removeAdditionalIsoPath');
+  ipcMain.handle(
+    'removeAdditionalIsoPath',
+    (event: IpcMainInvokeEvent, id: string) => {
+      additionalIsoPaths = additionalIsoPaths.filter(
+        (additionalIso) => additionalIso.id !== id,
+      );
+      store.set('additionalIsoPaths', additionalIsoPaths);
+      return additionalIsoPaths;
+    },
+  );
 
   let customSlippiNintendontPath = store.get('customSlippiNintendontPath', '');
   let slippiNintendontVersion = await getSlippiNintendontVersion(
@@ -152,7 +211,7 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
   );
 
   ipcMain.removeAllListeners('getSdCards');
-  ipcMain.handle('getSdCards', getSdCards);
+  ipcMain.handle('getSdCards', () => getSdCards(additionalIsoPaths));
 
   let forwarderVersion = '';
   ipcMain.removeAllListeners('getForwarderVersion');
@@ -201,6 +260,33 @@ export default async function setupIPC(mainWindow: BrowserWindow) {
         { highWaterMark },
       );
       keyToProgress.set(sdCard.key, { size, writeStream });
+
+      return new Promise<void>((resolve, reject) => {
+        readStream.on('error', reject);
+        writeStream.on('error', reject);
+        writeStream.on('close', resolve);
+        readStream.pipe(writeStream);
+      });
+    },
+  );
+  ipcMain.removeAllListeners('copyAdditionalIso');
+  ipcMain.handle(
+    'copyAdditionalIso',
+    async (event: IpcMainInvokeEvent, sdCard: SdCard, id: string) => {
+      const additionalIso = additionalIsoPaths.find((entry) => entry.id === id);
+      if (!additionalIso) {
+        throw new Error('Additional ISO not found in configured list');
+      }
+
+      const progressKey = `${sdCard.key}#${id}`;
+      const { size } = await stat(additionalIso.path);
+      const readStream = createReadStream(additionalIso.path, {
+        highWaterMark,
+      });
+      const dstPath = path.join(sdCard.key, additionalIsoRelativePath(id));
+      await mkdir(path.dirname(dstPath), { recursive: true });
+      const writeStream = createWriteStream(dstPath, { highWaterMark });
+      keyToProgress.set(progressKey, { size, writeStream });
 
       return new Promise<void>((resolve, reject) => {
         readStream.on('error', reject);

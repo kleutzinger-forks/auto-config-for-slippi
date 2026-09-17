@@ -1,9 +1,15 @@
+export type AdditionalIso = {
+  id: string;
+  path: string;
+};
+
 export type SdCard = {
   key: string;
   reason: string;
   forwarderVersion: string;
   slippiNintendontVersion: string;
   validIsoPath: string;
+  additionalIsoIdsPresent: string[];
 };
 
 export enum UCF {

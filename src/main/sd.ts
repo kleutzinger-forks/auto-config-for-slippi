@@ -14,7 +14,7 @@ import { list } from 'drivelist';
 import { app } from 'electron';
 import { gt, valid } from 'semver';
 import isValidISO from './iso';
-import { Config, SdCard, Video } from '../common/types';
+import { AdditionalIso, Config, SdCard, Video } from '../common/types';
 
 type RemovableDrive = {
   path: string;
@@ -24,6 +24,12 @@ type RemovableDrive = {
 
 const xmlParser = new XMLParser({ parseTagValue: false });
 
+// Additional ISOs are never autobooted, so their on-card folder naming just
+// needs to be unique and stable per configured entry, not human-meaningful.
+export function additionalIsoRelativePath(id: string) {
+  return path.join('games', `extra-${id}`, 'game.iso');
+}
+
 function canEnableStealthAutoboot(slippiNintendontVersion: string) {
   return (
     !valid(slippiNintendontVersion) || gt(slippiNintendontVersion, '1.13.0')
@@ -32,11 +38,13 @@ function canEnableStealthAutoboot(slippiNintendontVersion: string) {
 
 async function getSdCard(
   removableDrive: RemovableDrive,
+  additionalIsoPaths: AdditionalIso[],
 ): Promise<SdCard | null> {
   let reason = '';
   let forwarderVersion = '';
   let slippiNintendontVersion = '';
   let validIsoPath = '';
+  const additionalIsoIdsPresent: string[] = [];
   if (!removableDrive.readonly) {
     try {
       await access(removableDrive.path, constants.R_OK | constants.W_OK);
@@ -86,6 +94,11 @@ async function getSdCard(
           await Promise.all(
             gamesPaths
               .filter((gamePath) => gamePath.toLowerCase().endsWith('.iso'))
+              // additional ISOs live under games/extra-<id>/ and must never
+              // be picked up as the primary autoboot target
+              .filter(
+                (gamePath) => !gamePath.split(path.sep)[0].startsWith('extra-'),
+              )
               .map(async (gamePath) => {
                 if (await isValidISO(path.join(gamesPath, gamePath))) {
                   return gamePath;
@@ -100,6 +113,21 @@ async function getSdCard(
       } catch {
         // just catch
       }
+
+      await Promise.all(
+        additionalIsoPaths.map(async (additionalIso) => {
+          if (
+            await isValidISO(
+              path.join(
+                removableDrive.path,
+                additionalIsoRelativePath(additionalIso.id),
+              ),
+            )
+          ) {
+            additionalIsoIdsPresent.push(additionalIso.id);
+          }
+        }),
+      );
     } catch (e: unknown) {
       reason = e instanceof Error ? e.message : JSON.stringify(e ?? 'Unknown');
     }
@@ -113,10 +141,13 @@ async function getSdCard(
     forwarderVersion,
     slippiNintendontVersion,
     validIsoPath,
+    additionalIsoIdsPresent,
   };
 }
 
-export default async function getSdCards(): Promise<SdCard[]> {
+export default async function getSdCards(
+  additionalIsoPaths: AdditionalIso[],
+): Promise<SdCard[]> {
   const removableDriveList: RemovableDrive[] = (await list())
     .filter(
       (drive) =>
@@ -137,9 +168,13 @@ export default async function getSdCards(): Promise<SdCard[]> {
       }),
     );
 
-  return (await Promise.all(removableDriveList.map(getSdCard))).filter(
-    (sdCard) => sdCard !== null,
-  ) as SdCard[];
+  return (
+    await Promise.all(
+      removableDriveList.map((removableDrive) =>
+        getSdCard(removableDrive, additionalIsoPaths),
+      ),
+    )
+  ).filter((sdCard) => sdCard !== null) as SdCard[];
 }
 
 export async function writeNincfg(
